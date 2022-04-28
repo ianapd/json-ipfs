@@ -1,4 +1,4 @@
-import { Box, Container, Heading, FormControl, FormLabel, Input, Button, Textarea, Link, Text, VStack, Image, Spinner } from "@chakra-ui/react";
+import { Box, Container, Heading, FormControl, FormLabel, Input, Button, Textarea, Link, Text, VStack, Image, Spinner, HStack, Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, useDisclosure, ModalFooter } from "@chakra-ui/react";
 import { create } from "ipfs-http-client"
 import { useState, useEffect } from "react"
 
@@ -7,17 +7,27 @@ const itemState = {
   description: '',
   royalties: '',
   edition: '',
-  price: ''
+  price: '',
+  file: '',
+  properties: []
 }
 
 const client = create("https://ipfs.infura.io:5001/api/v0")
 
 export default function Home() {  
+  const { isOpen, onOpen, onClose } = useDisclosure()
+
   const [item, setItem] = useState(itemState)
   const [cid, setCid] = useState("")
   const [fileUrl, setFileUrl] = useState("")
   const [jsonData, setJsonData] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [properties, setProperties] = useState([])
+  const [property, setProperty] = useState([])
+  const [gameProperty, setGameProperty] = useState([{
+    "property": null,
+    "value": null
+  }])
 
   async function onChange ({ target: { name, value, files } }) {
     switch (name) {
@@ -50,6 +60,34 @@ export default function Home() {
     }
   }
 
+  function onAddToItem () {
+    console.log(property)
+    setItem({ ...item, properties: property })
+  }
+
+  function onPropertyChange({ target: { name, value } }) {
+    setGameProperty({...gameProperty, [name]: value })
+    if (gameProperty.property != null && gameProperty.value != null) {
+      setProperty([...property, {...gameProperty}])
+      setGameProperty([])
+    }
+  }
+
+  function onRemoveChange(index) {
+    const currentProperties = properties
+    const currentProperty = property
+
+    setProperties([...currentProperties.slice(0, index) , ...currentProperties.slice(index+1)])
+    setProperty([...currentProperty.slice(0, index) , ...currentProperty.slice(index, 1)])
+  }
+
+  function onFirstRemoveChange() {
+    setGameProperty([])
+    setProperty([])
+    console.log(gameProperty.property)
+    console.log(gameProperty.value)
+  }
+
   async function upload() {
     setIsLoading(true)
     const jsonData = JSON.stringify(item)
@@ -67,6 +105,7 @@ export default function Home() {
   }
 
   async function getJsonData(fileUrl) {
+    console.log(fileUrl)
     try {
       const data = await fetch(fileUrl)
       const json = await data.json()
@@ -81,6 +120,9 @@ export default function Home() {
     getJsonData(fileUrl)
     console.log(jsonData)
   }, [fileUrl])
+
+  console.log(property)
+  console.log(item)
 
   return (
     <Box pt={16}>
@@ -111,12 +153,65 @@ export default function Home() {
           <FormLabel>Price</FormLabel>
           <Input type="number" name="price" onChange={onChange} />
         </FormControl>
-        <Button onClick={upload} mb={4}>Upload to IPFS</Button>
-        <VStack align="start" spacing={0}>
+        <HStack justify="space-between">
+          <FormLabel>Properties</FormLabel>
+          <Button onClick={onOpen}>Add</Button>
+        </HStack> 
+        <Modal isOpen={isOpen} onClose={onClose}>
+          <ModalOverlay />
+          <ModalContent>
+            <ModalHeader>Add Property</ModalHeader>
+            <ModalCloseButton />
+            <ModalBody>
+              <Text mb={4}>Add property for your item</Text>
+              <HStack spacing={8} align="start">
+                <FormControl mb={4}>
+                  <FormLabel>Property</FormLabel>
+                  <Input name="property" value={gameProperty.property} onChange={onPropertyChange} />
+                </FormControl>
+                <FormControl mb={4}>
+                  <FormLabel>Value</FormLabel>
+                  <Input name="value" value={gameProperty.value} onChange={onPropertyChange} />
+                </FormControl>
+                <Button onClick={() => onFirstRemoveChange()}>Del</Button>
+              </HStack>
+              {
+                properties.map((p, index) => (
+                  <HStack key={index} spacing={8} align="start">
+                    <FormControl mb={4}>
+                      <FormLabel>Property</FormLabel>
+                      <Input name="property" onChange={onPropertyChange} />
+                    </FormControl>
+                    <FormControl mb={4}>
+                      <FormLabel>Value</FormLabel>
+                      <Input name="value" onChange={onPropertyChange} />
+                    </FormControl>
+                    <Button onClick={() => onRemoveChange(index)}>Del</Button>
+                  </HStack>
+                ))
+              }
+              <Button mb={4} onClick={() => {
+                setProperties([...properties, `p${properties.length + 1}`])
+                setGameProperty([])
+              }}>Add</Button>
+            </ModalBody>
+
+            <ModalFooter>
+              <Button variant='ghost' onClick={() => {
+                onAddToItem()
+                onClose()
+                setProperties([])
+              }}>Save</Button>
+              <Button onClick={onClose}>Close</Button>
+            </ModalFooter>
+          </ModalContent>
+        </Modal>
+        <VStack spacing={4} align="start">
+          <Button onClick={upload} mb={4}>Upload to IPFS</Button>
+          {
+            isLoading && <Spinner />
+          }
         </VStack>
-        {
-          isLoading && <Spinner />
-        }
         {
           jsonData ? (
             <VStack align="start" spacing={2} mb={8}>
@@ -128,6 +223,15 @@ export default function Home() {
               <Text>Royalties: {jsonData.royalties}</Text>
               <Text>Edition: {jsonData.edition}</Text>
               <Text>Price: {jsonData.price}</Text>
+              <Text>Properties</Text>
+              {
+                jsonData.properties.map((data, dataKey) => (
+                  <VStack key={dataKey} align="start" spacing={2}>
+                    <Text>Property: {data.property}</Text>
+                    <Text>Value: {data.value}</Text>
+                  </VStack>
+                ))
+              }
               {
                 fileUrl && (
                   <Link mb={2} as="a" href={fileUrl} target="_blank">
